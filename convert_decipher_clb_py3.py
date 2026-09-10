@@ -3,6 +3,8 @@ r"""
 Convert the legacy Decipher NoteTab clip library from Python 2.7 syntax
 to Python 3.x syntax, without overwriting the original file.
 
+Converter version: 2
+
 Designed for:
     Decipher-Surveys-Latest.clb
 
@@ -97,10 +99,29 @@ def manual_py2_to_py3(code: str) -> str:
         code,
     )
 
+    # Handle Python-2 multiline print statements before line-by-line conversion.
+    # The old Decipher addLoopBlock clip uses:
+    #
+    #     print """
+    #     ...
+    #     """ % input
+    #
+    # Convert that form to Python 3 print(...).
+    triple_dq = re.compile(
+        r'(?ms)^(\s*)print\s+("""(?:.*?)""")(\s*%\s*[^\r\n]+)?\s*$'
+    )
+
+    def _convert_multiline_print(match):
+        indent = match.group(1)
+        literal = match.group(2)
+        formatting = match.group(3) or ""
+        return f"{indent}print({literal}{formatting})"
+
+    code = triple_dq.sub(_convert_multiline_print, code)
+
     code = "".join(convert_print_statement(line) for line in code.splitlines(True))
 
-    # Common Python-2 names. These are mostly defensive; the upstream file
-    # appears to rely primarily on old print and except syntax.
+    # Common Python-2 names.
     code = re.sub(r'\bxrange\(', 'range(', code)
     code = re.sub(r'\braw_input\(', 'input(', code)
     code = code.replace(".iteritems()", ".items()")
@@ -109,7 +130,6 @@ def manual_py2_to_py3(code: str) -> str:
     code = code.replace("from itertools import izip", "from builtins import zip")
     code = code.replace("itertools.izip(", "zip(")
     return code
-
 
 def convert_python_section(name: str, body: str, tool) -> Tuple[str, str]:
     """
